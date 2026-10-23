@@ -44,7 +44,12 @@ export default function AssessmentListPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Assessments</h1>
+        <div>
+          <h1 className="text-xl font-semibold">Assessments</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Open an assessment to invite candidates, monitor interviews, and view results.
+          </p>
+        </div>
         <Button onClick={() => navigate("/assessments/new")}>
           <Plus className="h-4 w-4 mr-1.5" /> New Assessment
         </Button>
@@ -91,7 +96,16 @@ export default function AssessmentListPage() {
                     )}
                   </div>
                 </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    navigate(`/assessments/${a.id}/invite`);
+                  }}
+                >
+                  Manage <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
               </CardContent>
             </Card>
           ))}

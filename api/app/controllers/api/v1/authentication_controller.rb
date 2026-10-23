@@ -19,6 +19,26 @@ module Api
         json_response({ token:, user: { id: user.id, email: user.email, role: user.role } })
       end
 
+      def signup
+        user = User.new(
+          email: params[:email],
+          password: params[:password],
+          role: "user"
+        )
+
+        if user.save
+          json_response(
+            {
+              message: "Signup successful. Your account is awaiting admin approval.",
+              user: { id: user.id, email: user.email, role: user.role }
+            },
+            :created
+          )
+        else
+          json_error(user.errors.full_messages.first, :unprocessable_entity)
+        end
+      end
+
       private
 
       def resolve_scheme

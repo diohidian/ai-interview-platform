@@ -23,7 +23,12 @@ export default function VacancyListPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Vacancies</h1>
+        <div>
+          <h1 className="text-xl font-semibold">Vacancies</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Open a vacancy to edit its role details and skill requirements.
+          </p>
+        </div>
         <Button onClick={() => navigate("/vacancies/new")}>
           <Plus className="h-4 w-4 mr-1.5" /> New Vacancy
         </Button>
@@ -59,7 +64,16 @@ export default function VacancyListPage() {
                   <Briefcase className="h-4 w-4 text-muted-foreground" />
                   <p className="font-medium text-sm">{v.role_title}</p>
                 </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    navigate(`/vacancies/${v.id}/edit`);
+                  }}
+                >
+                  Edit <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
               </CardContent>
             </Card>
           ))}

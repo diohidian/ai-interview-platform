@@ -8,15 +8,27 @@ import type { TranscriptTurn } from "@/types";
 
 export default function TranscriptPage() {
   const { id, sessionId } = useParams<{ id: string; sessionId: string }>();
+  const parsedSessionId = Number(sessionId);
+  const hasValidSessionId =
+    sessionId !== undefined &&
+    /^\d+$/.test(sessionId) &&
+    Number.isSafeInteger(parsedSessionId) &&
+    parsedSessionId > 0;
   const [turns, setTurns] = useState<TranscriptTurn[]>([]);
   const [candidateName, setCandidateName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
   useEffect(() => {
+    if (!hasValidSessionId) {
+      setError(true);
+      setLoading(false);
+      return;
+    }
+
     Promise.all([
-      sessionsApi.getTranscript(Number(sessionId)),
-      sessionsApi.get(Number(sessionId)),
+      sessionsApi.getTranscript(parsedSessionId),
+      sessionsApi.get(parsedSessionId),
     ])
       .then(([tRes, sRes]) => {
         setTurns(tRes.data.turns);
@@ -24,7 +36,7 @@ export default function TranscriptPage() {
       })
       .catch(() => setError(true))
       .finally(() => setLoading(false));
-  }, [sessionId]);
+  }, [hasValidSessionId, parsedSessionId]);
 
   const handleDownload = () => {
     const lines = turns.map((t) => {
@@ -75,7 +87,9 @@ export default function TranscriptPage() {
 
       {!loading && error && (
         <div className="border rounded-lg p-6 text-center text-sm text-destructive">
-          Failed to load transcript. Please refresh.
+          {hasValidSessionId
+            ? "Failed to load transcript. The session may not exist or you may not have access."
+            : "Invalid transcript link: the session ID is missing or invalid. Open the transcript from a valid interview session."}
         </div>
       )}
 

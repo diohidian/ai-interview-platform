@@ -27,7 +27,7 @@ Fill in the required values in `config/application.yml`:
 | `GEMINI_PRO_MODEL` | e.g. `gemini-2.5-pro` |
 | `REDIS_URL` | e.g. `redis://localhost:6379/1` |
 | `ALLOWED_ORIGINS` | CORS origin for the frontend, e.g. `http://localhost:5173` |
-| `APP_BASE_URL` | Backend base URL, e.g. `http://localhost:3001` |
+| `APP_BASE_URL` | Frontend base URL for candidate interview links, e.g. `http://localhost:5173` |
 
 ---
 
@@ -95,3 +95,15 @@ Runs on **port 5173** by default.
 | Sidekiq | `bundle exec sidekiq -r ./config/environment.rb -C config/sidekiq.yml` | — |
 | Rails API | `bundle exec rails server` | 3001 |
 | Frontend | `npm run dev` (in `ai-interview-web/`) | 5173 |
+
+## create user manual and aprove user to admin manual
+
+```bash
+bundle exec rails console
+
+User.create!(email: "email-anda@example.com", password: "kata-sandi-pilihan", role: "admin") # create user
+
+user = User.find_by!(email: "email-pendaftar@example.com")
+user.update!(role: "admin") # aprove user
+
+```
