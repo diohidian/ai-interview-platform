@@ -103,7 +103,7 @@ bundle exec rails console
 
 User.create!(email: "email-anda@example.com", password: "kata-sandi-pilihan", role: "admin") # create user
 
-user = User.find_by!(email: "email-pendaftar@example.com")
+user = User.find_by!(email: "dio12@gmail.com")
 user.update!(role: "admin") # aprove user
 
 ```

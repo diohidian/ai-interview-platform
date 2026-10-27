@@ -174,6 +174,7 @@ export interface PaginationMeta {
 }
 
 // WebSocket message types
+// add error type message
 export type InterviewState =
   | "idle"
   | "hardware_check"
@@ -182,6 +183,7 @@ export type InterviewState =
   | "reconnecting"
   | "draining_audio"
   | "ending"
+  | "error"
   | "complete";
 
 export type InterviewSpeaker = "ai" | "candidate" | null;

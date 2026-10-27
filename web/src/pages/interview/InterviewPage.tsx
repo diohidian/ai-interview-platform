@@ -48,7 +48,7 @@ export default function InterviewPage() {
         setSessionId(res.data.session_id);
         if (res.data.session_status === "ended") setInterviewState("complete");
       })
-      .catch(() => setInterviewState("complete"));
+      .catch(() => setInterviewState("error"));
   }, [token]);
 
   const muteRef = useRef<(() => void) | null>(null);
@@ -236,6 +236,19 @@ export default function InterviewPage() {
           Thank you. The interview has been recorded.
           <br />
           The hiring team will review your results and follow up with you.
+        </p>
+      </div>
+    );
+  }
+
+  if (interviewState === "error") {
+    return (
+      <div className="max-w-xl mx-auto px-4 py-16 text-center space-y-4">
+        <div className="text-4xl">⚠️</div>
+        <h2 className="text-xl font-semibold">Interview connection failed</h2>
+        <p className="text-sm text-muted-foreground">
+          The interview could not connect or was interrupted, so it may not have been recorded.
+          Please contact the interviewer for help before trying again.
         </p>
       </div>
     );
