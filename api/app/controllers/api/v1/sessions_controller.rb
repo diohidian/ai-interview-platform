@@ -43,6 +43,23 @@ module Api
         json_error("Assessment not found", :not_found)
       end
 
+      # DELETE /api/v1/assessments/:assessment_id/sessions/:id
+      def destroy
+        assessment = Assessment.find(params[:assessment_id])
+        session = assessment.sessions.find(params[:id])
+
+        unless AudioWebSocketMiddleware.close_session_connections(session.id)
+          return json_error("Could not safely stop the interview connection. Please retry.", :service_unavailable)
+        end
+
+        session.destroy!
+        json_response(message: "Candidate and interview data deleted")
+      rescue ActiveRecord::RecordNotFound
+        json_error("Candidate invite not found", :not_found)
+      rescue ActiveRecord::RecordNotDestroyed => e
+        json_error(e.record.errors.full_messages.first || "Candidate data could not be deleted", :unprocessable_entity)
+      end
+
       # GET /api/v1/sessions/:id
       def show
         json_response(

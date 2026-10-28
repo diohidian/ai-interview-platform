@@ -45,8 +45,10 @@ module Api
 
       # DELETE /api/v1/vacancies/:id
       def destroy
-        @vacancy.destroy
+        @vacancy.destroy!
         json_response(message: "Vacancy deleted")
+      rescue ActiveRecord::RecordNotDestroyed => e
+        json_error(e.record.errors.full_messages.first || "Vacancy could not be deleted", :unprocessable_entity)
       end
 
       private

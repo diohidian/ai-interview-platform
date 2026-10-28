@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'faye/websocket'
+require 'timeout'
 
 # Rack middleware that proxies a WebSocket at /ws/sessions/:id/audio between the browser (16kHz PCM)
 # and Gemini Live (24kHz PCM). Audio is buffered in a ring buffer for reconnection replay.
@@ -14,6 +15,44 @@ class AudioWebSocketMiddleware
   PROACTIVE_RECONNECT_JITTER = 30  # randomise to avoid thundering herd
 
   SYSTEM_SIGNAL_TOKEN = 'SYS-TC-7x9k'
+
+  @connection_registry = Hash.new { |registry, session_id| registry[session_id] = [] }
+  @connection_registry_mutex = Mutex.new
+
+  class << self
+    def register_connection(session_id, middleware, browser_ws, state)
+      @connection_registry_mutex.synchronize do
+        @connection_registry[session_id] << [middleware, browser_ws, state]
+      end
+    end
+
+    def unregister_connection(session_id, state)
+      @connection_registry_mutex.synchronize do
+        @connection_registry[session_id].reject! { |(_, _, registered_state)| registered_state.equal?(state) }
+        @connection_registry.delete(session_id) if @connection_registry[session_id].empty?
+      end
+    end
+
+    def close_session_connections(session_id)
+      connections = @connection_registry_mutex.synchronize do
+        @connection_registry[session_id].dup
+      end
+
+      connections.each do |middleware, browser_ws, state|
+        completed = Queue.new
+        EM.schedule do
+          middleware.close_for_deletion(browser_ws, state)
+          completed << true
+        end
+        Timeout.timeout(5) { completed.pop }
+      end
+
+      true
+    rescue StandardError => e
+      Rails.logger.error("[AudioWS] Failed to close deleted session #{session_id}: #{e.class}: #{e.message}")
+      false
+    end
+  end
 
   WRAP_UP_SIGNAL = "[TIME CONTROL:#{SYSTEM_SIGNAL_TOKEN}] { \"wrap_up\": true, \"all_skills_covered\": true }" \
                    ' — Close the interview NOW. Do NOT ask any more questions.' \
@@ -56,6 +95,7 @@ class AudioWebSocketMiddleware
     end
 
     state.session = session
+    self.class.register_connection(session.id, self, browser_ws, state)
     connect_to_gemini(browser_ws, state)
   rescue StandardError => e
     Rails.logger.error("[AudioWS] Exception in on:open: #{e.class}: #{e.message}\n#{e.backtrace.first(5).join("\n")}")
@@ -92,6 +132,14 @@ class AudioWebSocketMiddleware
 
   def handle_browser_close(event, browser_ws, state, session_id)
     Rails.logger.info("[AudioWS] Browser disconnected: session=#{session_id} code=#{event.code}")
+    return if state.deleted
+
+    if state.session&.ended?
+      state.gemini_client&.close
+      self.class.unregister_connection(session_id, state)
+      return
+    end
+
     state.browser_disconnected_at = Time.current
     state.proactive_reconnect_timer&.cancel
 
@@ -374,6 +422,8 @@ class AudioWebSocketMiddleware
 
   # Handles unexpected Gemini WebSocket close (not GoAway). Audio is buffered during the gap and replayed.
   def handle_gemini_close(browser_ws, state, code:, reason:)
+    return if state.deleted
+
     # Normal close (1000) is intentional unless flagged as inactivity_close (which also uses 1000).
     return if code == 1000 && !state.gemini_client&.inactivity_close
 
@@ -405,6 +455,7 @@ class AudioWebSocketMiddleware
 
     expected_client = state.gemini_client
     EM.add_timer(backoff) do
+      next if state.deleted
       next unless state.gemini_client.equal?(expected_client)
       next if state.session.ended?
 
@@ -504,11 +555,15 @@ class AudioWebSocketMiddleware
     state.graceful_end_timer = EM::Timer.new(BROWSER_GRACE_PERIOD) do
       Thread.new do
         ActiveRecord::Base.connection_pool.with_connection do
+          next if state.deleted
           next if state.session.reload.ended?
 
           Rails.logger.info("[AudioWS] Grace period expired — ending session #{state.session.id}")
           Sessions::EndHandler.new(state.session).call(reason: 'error')
-          EM.schedule { state.gemini_client&.close }
+          EM.schedule do
+            state.gemini_client&.close
+            self.class.unregister_connection(state.session.id, state)
+          end
         end
       rescue StandardError => e
         Rails.logger.error("[AudioWS] Thread crashed (graceful end): #{e.class}: #{e.message}")
@@ -527,9 +582,28 @@ class AudioWebSocketMiddleware
           browser_ws.close
         rescue StandardError
           nil
+        ensure
+          self.class.unregister_connection(state.session.id, state)
         end
       end
     end
+  end
+
+  def close_for_deletion(browser_ws, state)
+    return if state.deleted
+
+    state.deleted = true
+    state.proactive_reconnect_timer&.cancel
+    state.graceful_end_timer&.cancel
+    state.time_ceiling_timer&.cancel
+    state.coverage_end_timer&.cancel
+
+    send_json(browser_ws, type: 'session_ended', reason: 'deleted')
+    state.gemini_client&.supersede!
+    state.gemini_client&.close
+    browser_ws.close
+  ensure
+    self.class.unregister_connection(state.session.id, state) if state.session
   end
 
   # Only flags pending — actual injection always deferred to handle_coverage_auto_end at a turn-safe point,
@@ -783,7 +857,7 @@ class AudioWebSocketMiddleware
                   :graceful_end_timer, :time_ceiling_timer,
                   :coverage_end_timer, :coverage_pending,
                   :last_ai_turn_ends_with_question, :wrap_up_injected,
-                  :waiting_for_candidate_response
+                  :waiting_for_candidate_response, :deleted
 
     def initialize
       @turn_counter = 0
@@ -800,4 +874,6 @@ class AudioWebSocketMiddleware
       @turn_counter += 1
     end
   end
+
+  public :close_for_deletion
 end
